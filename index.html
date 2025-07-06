@@ -334,29 +334,6 @@
     <script>
         let lastUpdateTime = Date.now();
 
-        // Sample data for Munich S-Bahn and U-Bahn
-        const transitData = {
-            sbahnOst: [
-                { line: "S1", destination: "Ostbahnhof", minutes: 3, status: "warning" },
-                { line: "S2", destination: "Ostbahnhof", minutes: 7, status: "normal" },
-                { line: "S3", destination: "Ostbahnhof", minutes: 12, status: "normal" },
-                { line: "S8", destination: "Ostbahnhof", minutes: 15, status: "normal" }
-            ],
-            ubahn: [
-                { line: "U1", destination: "Olympia-Einkaufszentrum", minutes: 2, status: "urgent" },
-                { line: "U2", destination: "Messestadt Ost", minutes: 4, status: "warning" },
-                { line: "U4", destination: "Arabellapark", minutes: 6, status: "normal" },
-                { line: "U5", destination: "Neuperlach Süd", minutes: 9, status: "normal" },
-                { line: "U1", destination: "Olympia-Einkaufszentrum", minutes: 12, status: "normal" }
-            ],
-            sbahnAirport: [
-                { line: "S1", destination: "Flughafen", minutes: 8, status: "normal" },
-                { line: "S8", destination: "Flughafen", minutes: 13, status: "normal" },
-                { line: "S1", destination: "Flughafen", minutes: 18, status: "normal" },
-                { line: "S8", destination: "Flughafen", minutes: 23, status: "normal" }
-            ]
-        };
-
         // Sample weather data
         const weatherData = {
             temperature: 18,
@@ -366,6 +343,87 @@
             wind: 12,
             pressure: 1013
         };
+
+        // Parse API data and categorize arrivals
+        function parseApiData(apiData) {
+            const now = Date.now();
+            const arrivals = {
+                sbahnOst: [],
+                ubahn: [],
+                sbahnAirport: []
+            };
+
+            apiData.forEach(item => {
+                const minutesUntilArrival = Math.max(0, Math.floor((item.realtimeDepartureTime - now) / 60000));
+                
+                let status = 'normal';
+                if (minutesUntilArrival <= 2) {
+                    status = 'urgent';
+                } else if (minutesUntilArrival <= 4) {
+                    status = 'warning';
+                }
+
+                const arrival = {
+                    line: item.label,
+                    destination: item.destination,
+                    minutes: minutesUntilArrival,
+                    status: status,
+                    delay: item.delayInMinutes,
+                    platform: item.platform || item.stopPositionNumber
+                };
+
+                // Filter S-Bahn S1 (divaId: 92M01) by lineId to determine direction
+                if (item.transportType === 'SBAHN' && item.divaId === '92M01') {
+                    // Check lineId to determine direction
+                    if (item.lineId && item.lineId.includes(':H:')) {
+                        // Direction to Ostbahnhof (lineId contains :H:)
+                        arrivals.sbahnOst.push(arrival);
+                    } else if (item.lineId && item.lineId.includes(':R:')) {
+                        // Direction to Flughafen (lineId contains :R:)
+                        arrivals.sbahnAirport.push(arrival);
+                    }
+                }
+                
+                // Filter U-Bahn
+                if (item.transportType === 'UBAHN') {
+                    arrivals.ubahn.push(arrival);
+                }
+            });
+
+            // Sort all arrivals by minutes
+            Object.keys(arrivals).forEach(key => {
+                arrivals[key].sort((a, b) => a.minutes - b.minutes);
+            });
+
+            return arrivals;
+        }
+
+        // Sample API data for testing (replace with actual API call)
+        const sampleApiData = [
+            {"plannedDepartureTime":1751827500000,"realtime":true,"delayInMinutes":0,"realtimeDepartureTime":1751827500000,"transportType":"UBAHN","label":"U3","divaId":"010U3","network":"swm","trainType":"","destination":"Fürstenried West","cancelled":false,"sev":false,"platform":2,"platformChanged":false,"messages":[],"infos":[],"bannerHash":"","occupancy":"UNKNOWN","stationGlobalId":"de:09162:300","stopPointGlobalId":"de:09162:300:51:52","lineId":"swm:010U3:G:H:015","tripCode":224},
+            {"plannedDepartureTime":1751827680000,"realtime":true,"delayInMinutes":4,"realtimeDepartureTime":1751827680000,"transportType":"SBAHN","label":"S1","divaId":"92M01","network":"ddb","trainType":"","destination":"Leuchtenbergring","cancelled":false,"sev":false,"platform":5,"platformChanged":false,"messages":[],"infos":[],"bannerHash":"","occupancy":"UNKNOWN","stationGlobalId":"de:09162:300","stopPointGlobalId":"","lineId":"ddb:92M01: :H:j25","tripCode":578},
+            {"plannedDepartureTime":1751828160000,"realtime":true,"delayInMinutes":0,"realtimeDepartureTime":1751828160000,"transportType":"SBAHN","label":"S1","divaId":"92M01","network":"ddb","trainType":"","destination":"Flughafen München","cancelled":false,"sev":false,"platform":4,"platformChanged":false,"messages":[],"infos":[],"bannerHash":"","occupancy":"UNKNOWN","stationGlobalId":"de:09162:300","stopPointGlobalId":"","lineId":"ddb:92M01: :R:j25","tripCode":1238}
+        ];
+
+        // Function to fetch real API data from MVG
+        async function fetchTransitData() {
+            try {
+                const response = await fetch('https://www.mvg.de/api/bgw-pt/v3/departures?globalId=de:09162:300&limit=20&offsetInMinutes=0');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('API Response:', data); // For debugging
+                return parseApiData(data);
+            } catch (error) {
+                console.error('Error fetching transit data:', error);
+                console.log('Using sample data as fallback');
+                // Fallback to sample data if API fails
+                return parseApiData(sampleApiData);
+            }
+        }
 
         function addMinutesToTime(minutes) {
             const now = new Date();
@@ -419,52 +477,39 @@
             document.getElementById('lastUpdated').textContent = secondsSinceUpdate;
         }
 
-        function updateArrivals() {
-            // Simulate real-time updates by adjusting arrival times
-            Object.keys(transitData).forEach(transportType => {
-                transitData[transportType].forEach(arrival => {
-                    // Randomly adjust arrival times to simulate real-time changes
-                    if (Math.random() < 0.3) { // 30% chance of change
-                        const change = Math.random() < 0.5 ? -1 : 1;
-                        arrival.minutes = Math.max(0, arrival.minutes + change);
-                        
-                        // Update status based on arrival time
-                        if (arrival.minutes <= 2) {
-                            arrival.status = 'urgent';
-                        } else if (arrival.minutes <= 4) {
-                            arrival.status = 'warning';
-                        } else {
-                            arrival.status = 'normal';
-                        }
-                    }
-                });
-            });
-
-            // Simulate weather changes occasionally
-            if (Math.random() < 0.1) { // 10% chance of weather change
-                const temps = [15, 16, 17, 18, 19, 20, 21];
-                const conditions = [
-                    { desc: "Sunny", icon: "☀️" },
-                    { desc: "Partly cloudy", icon: "⛅" },
-                    { desc: "Cloudy", icon: "☁️" },
-                    { desc: "Light rain", icon: "🌦️" }
-                ];
+        async function updateArrivals() {
+            try {
+                // Fetch real transit data
+                const transitData = await fetchTransitData();
                 
-                weatherData.temperature = temps[Math.floor(Math.random() * temps.length)];
-                const condition = conditions[Math.floor(Math.random() * conditions.length)];
-                weatherData.description = condition.desc;
-                weatherData.icon = condition.icon;
-                weatherData.humidity = Math.floor(Math.random() * 30) + 50; // 50-80%
-                weatherData.wind = Math.floor(Math.random() * 15) + 5; // 5-20 km/h
-            }
+                // Simulate weather changes occasionally
+                if (Math.random() < 0.1) { // 10% chance of weather change
+                    const temps = [15, 16, 17, 18, 19, 20, 21];
+                    const conditions = [
+                        { desc: "Sunny", icon: "☀️" },
+                        { desc: "Partly cloudy", icon: "⛅" },
+                        { desc: "Cloudy", icon: "☁️" },
+                        { desc: "Light rain", icon: "🌦️" }
+                    ];
+                    
+                    weatherData.temperature = temps[Math.floor(Math.random() * temps.length)];
+                    const condition = conditions[Math.floor(Math.random() * conditions.length)];
+                    weatherData.description = condition.desc;
+                    weatherData.icon = condition.icon;
+                    weatherData.humidity = Math.floor(Math.random() * 30) + 50; // 50-80%
+                    weatherData.wind = Math.floor(Math.random() * 15) + 5; // 5-20 km/h
+                }
 
-            // Render updated arrivals
-            renderArrivals('sbahn-ost-arrivals', transitData.sbahnOst);
-            renderArrivals('ubahn-arrivals', transitData.ubahn);
-            renderArrivals('sbahn-airport-arrivals', transitData.sbahnAirport);
-            
-            updateWeather();
-            lastUpdateTime = Date.now();
+                // Render updated arrivals
+                renderArrivals('sbahn-ost-arrivals', transitData.sbahnOst);
+                renderArrivals('ubahn-arrivals', transitData.ubahn);
+                renderArrivals('sbahn-airport-arrivals', transitData.sbahnAirport);
+                
+                updateWeather();
+                lastUpdateTime = Date.now();
+            } catch (error) {
+                console.error('Error updating arrivals:', error);
+            }
         }
 
         // Initial render
@@ -475,6 +520,13 @@
 
         // Update "seconds ago" counter every second
         setInterval(updateLastUpdated, 1000);
+
+        // Additional fetch on page focus (when user returns to tab)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                updateArrivals();
+            }
+        });
     </script>
 </body>
 </html>
