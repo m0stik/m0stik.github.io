@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Forecast</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .weather-widget {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .location {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3436;
+            margin-bottom: 5px;
+        }
+
+        .date {
+            font-size: 14px;
+            color: #636e72;
+        }
+
+        .current-weather {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            padding: 20px;
+            background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
+            border-radius: 15px;
+            color: white;
+        }
+
+        .current-temp {
+            font-size: 48px;
+            font-weight: 700;
+        }
+
+        .weather-info {
+            text-align: right;
+        }
+
+        .weather-desc {
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+
+        .weather-details {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .forecast {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .forecast-item {
+            background: rgba(116, 185, 255, 0.1);
+            padding: 15px 10px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid rgba(116, 185, 255, 0.2);
+        }
+
+        .forecast-day {
+            font-size: 12px;
+            font-weight: 600;
+            color: #2d3436;
+            margin-bottom: 8px;
+        }
+
+        .forecast-temp {
+            font-size: 16px;
+            font-weight: 700;
+            color: #0984e3;
+            margin-bottom: 5px;
+        }
+
+        .forecast-rain {
+            font-size: 11px;
+            color: #636e72;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #636e72;
+        }
+
+        .error {
+            text-align: center;
+            padding: 20px;
+            color: #d63031;
+            background: rgba(214, 48, 49, 0.1);
+            border-radius: 10px;
+        }
+
+        .refresh-btn {
+            background: #0984e3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+            width: 100%;
+        }
+
+        .refresh-btn:hover {
+            background: #0b7dda;
+        }
+
+        .weather-icon {
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="weather-widget">
+        <div class="header">
+            <div class="location">Munich, Bavaria</div>
+            <div class="date" id="currentDate"></div>
+        </div>
+        
+        <div id="weatherContent" class="loading">
+            Loading weather data...
+        </div>
+        
+        <button class="refresh-btn" onclick="fetchWeather()">Refresh</button>
+    </div>
+
+    <script>
+        const API_URL = 'https://my.meteoblue.com/packages/basic-1h_basic-day?apikey=b4CKohQWp2EfNFyv&lat=48.1374&lon=11.5755&asl=524&format=json';
+        //# https://my.meteoblue.com/packages/basic-1h_basic-day?apikey=b4CKohQWp2EfNFyv&lat=48.1374&lon=11.5755&asl=524&format=json
+        function formatDate(date) {
+            return date.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+        }
+
+        function formatTime(date) {
+            return date.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function getWeatherIcon(pictocode) {
+            const icons = {
+                1: '☀️',   // sunny
+                2: '⛅',   // partly cloudy
+                3: '☁️',   // cloudy
+                4: '☁️',   // overcast
+                6: '🌧️',   // rain
+                7: '🌧️',   // light rain
+                8: '🌦️',   // showers
+                9: '🌦️',   // light showers
+                16: '⛈️',  // thunderstorm
+                19: '🌧️',  // rain
+                20: '🌦️',  // light rain
+                21: '☀️',  // sunny
+                22: '⛅',  // partly cloudy
+                28: '⛈️',  // thunderstorm
+                31: '🌨️',  // snow
+                33: '⛈️'   // heavy thunderstorm
+            };
+            return icons[pictocode] || '🌤️';
+        }
+
+        function getWeatherDescription(pictocode) {
+            const descriptions = {
+                1: 'Sunny',
+                2: 'Partly Cloudy',
+                3: 'Cloudy',
+                4: 'Overcast',
+                6: 'Rain',
+                7: 'Light Rain',
+                8: 'Showers',
+                9: 'Light Showers',
+                16: 'Thunderstorm',
+                19: 'Rain',
+                20: 'Light Rain',
+                21: 'Sunny',
+                22: 'Partly Cloudy',
+                28: 'Thunderstorm',
+                31: 'Snow',
+                33: 'Heavy Thunderstorm'
+            };
+            return descriptions[pictocode] || 'Unknown';
+        }
+
+        function getDayName(dateString) {
+            const date = new Date(dateString);
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            
+            if (date.toDateString() === today.toDateString()) {
+                return 'Today';
+            } else if (date.toDateString() === tomorrow.toDateString()) {
+                return 'Tomorrow';
+            } else {
+                return date.toLocaleDateString('en-US', { weekday: 'short' });
+            }
+        }
+
+        async function fetchWeather() {
+            const contentDiv = document.getElementById('weatherContent');
+            contentDiv.innerHTML = '<div class="loading">Loading weather data...</div>';
+            
+            try {
+                const response = await fetch(API_URL);
+                console.log(response)
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                displayWeather(data);
+                
+            } catch (error) {
+                console.error('Error fetching weather:', error);
+                contentDiv.innerHTML = `
+                    <div class="error">
+                        <p>Unable to fetch weather data</p>
+                        <p style="font-size: 12px; margin-top: 5px;">${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayWeather(data) {
+            const contentDiv = document.getElementById('weatherContent');
+            
+            // Get current weather data
+            const currentTemp = data.data_1h.temperature[0];
+            const currentPicto = data.data_1h.pictocode[0];
+            const currentHumidity = data.data_1h.relativehumidity[0];
+            const currentWindSpeed = data.data_1h.windspeed[0];
+            const currentPrecipitation = data.data_1h.precipitation_probability[0];
+            
+            // Get daily forecast
+            const dailyData = data.data_day;
+            
+            let forecastHTML = '';
+            for (let i = 0; i < Math.min(5, dailyData.time.length); i++) {
+                const day = getDayName(dailyData.time[i]);
+                const maxTemp = Math.round(dailyData.temperature_max[i]);
+                const minTemp = Math.round(dailyData.temperature_min[i]);
+                const precipitation = dailyData.precipitation_probability[i];
+                const icon = getWeatherIcon(dailyData.pictocode[i]);
+                
+                forecastHTML += `
+                    <div class="forecast-item">
+                        <div class="forecast-day">${day}</div>
+                        <div class="weather-icon">${icon}</div>
+                        <div class="forecast-temp">${maxTemp}°/${minTemp}°</div>
+                        <div class="forecast-rain">${precipitation}%</div>
+                    </div>
+                `;
+            }
+            
+            contentDiv.innerHTML = `
+                <div class="current-weather">
+                    <div>
+                        <div class="current-temp">${Math.round(currentTemp)}°C</div>
+                        <div style="font-size: 14px; opacity: 0.9;">Feels like ${Math.round(data.data_1h.felttemperature[0])}°C</div>
+                    </div>
+                    <div class="weather-info">
+                        <div class="weather-icon">${getWeatherIcon(currentPicto)}</div>
+                        <div class="weather-desc">${getWeatherDescription(currentPicto)}</div>
+                        <div class="weather-details">
+                            Humidity: ${currentHumidity}%<br>
+                            Wind: ${Math.round(currentWindSpeed * 3.6)} km/h<br>
+                            Rain: ${currentPrecipitation}%
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="forecast">
+                    ${forecastHTML}
+                </div>
+            `;
+        }
+
+        // Initialize
+        document.getElementById('currentDate').textContent = formatDate(new Date());
+        fetchWeather();
+        
+        // Auto-refresh every 30 minutes
+        setInterval(fetchWeather, 30 * 60 * 1000);
+    </script>
+</body>
+</html>
